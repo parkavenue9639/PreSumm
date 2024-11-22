@@ -3,6 +3,8 @@
 
 import argparse
 import time
+import multiprocessing
+
 
 from others.logging import init_logger
 from prepro import data_builder
@@ -41,6 +43,7 @@ def str2bool(v):
 
 
 if __name__ == '__main__':
+    multiprocessing.set_start_method('spawn')
     parser = argparse.ArgumentParser()
     parser.add_argument("-pretrained_model", default='bert', type=str)
 
@@ -70,4 +73,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     init_logger(args.log_file)
-    eval('data_builder.'+args.mode + '(args)')
+    eval('data_builder.'+args.mode + '(args)')  # 将生成的字符串作为 Python 表达式执行，动态调用 data_builder 对象的指定方法。

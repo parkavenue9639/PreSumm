@@ -12,6 +12,8 @@ from os.path import join as pjoin
 
 import torch
 from multiprocess import Pool
+from multiprocessing import Process
+import platform
 
 from others.logging import logger
 from others.tokenization import BertTokenizer
@@ -279,16 +281,29 @@ def format_to_bert(args):
         datasets = ['train', 'valid', 'test']
     for corpus_type in datasets:
         a_lst = []
-        for json_f in glob.glob(pjoin(args.raw_path, '*' + corpus_type + '.*.json')):
+        for json_f in glob.glob(pjoin(args.raw_path, '.*' + corpus_type + '.*.json')):
             real_name = json_f.split('/')[-1]
             a_lst.append((corpus_type, json_f, args, pjoin(args.save_path, real_name.replace('json', 'bert.pt'))))
         print(a_lst)
-        pool = Pool(args.n_cpus)
-        for d in pool.imap(_format_to_bert, a_lst):
-            pass
 
-        pool.close()
-        pool.join()
+        # 在 macOS 上，fork 后的新进程可能调用 Objective-C runtime（如 NSString 的初始化），这在多线程环境下是不安全的。
+        system_type = platform.system()
+        if system_type == 'Darwin':
+            processes = []
+            for a in a_lst:
+                p = Process(target=_format_to_bert, args=(a,))
+                processes.append(p)
+                p.start()
+
+            for p in processes:
+                p.join()
+        else:
+            pool = Pool(args.n_cpus)
+            for d in pool.imap(_format_to_bert, a_lst):
+                pass
+
+            pool.close()
+            pool.join()
 
 
 def _format_to_bert(params):

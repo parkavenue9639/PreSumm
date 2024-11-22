@@ -6,6 +6,7 @@ from __future__ import division
 
 import argparse
 import os
+import torch
 from others.logging import init_logger
 from train_abstractive import validate_abs, train_abs, baseline, test_abs, test_text_abs
 from train_extractive import train_ext, validate_ext, test_ext
@@ -109,13 +110,27 @@ if __name__ == '__main__':
     parser.add_argument("-block_trigram", type=str2bool, nargs='?', const=True, default=True)
 
     args = parser.parse_args()
-    args.gpu_ranks = [int(i) for i in range(len(args.visible_gpus.split(',')))]
-    args.world_size = len(args.gpu_ranks)
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.visible_gpus
+    # 根据可见的 GPU 配置 gpu_ranks
+    if torch.backends.mps.is_available() and os.name == 'posix' and 'darwin' in os.sys.platform:
+        # macOS 上支持 MPS
+        args.gpu_ranks = [0]  # MPS 默认设备
+        args.world_size = 1  # MPS 设备数量固定为 1
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""  # macOS 上不需要 CUDA 环境变量
+        device = "mps"
+        device_id = 0  # 在 MPS 上，设备 ID 固定为 0
+    else:
+        # 其他平台逻辑，例如 CUDA 或 CPU
+        args.gpu_ranks = [int(i) for i in range(len(args.visible_gpus.split(',')))]
+        args.world_size = len(args.gpu_ranks)
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.visible_gpus
+        device = "cpu" if args.visible_gpus == '-1' else "cuda"
+        device_id = 0 if device == "cuda" else -1
 
+    # 初始化日志
     init_logger(args.log_file)
-    device = "cpu" if args.visible_gpus == '-1' else "cuda"
-    device_id = 0 if device == "cuda" else -1
+
+    # 设备初始化
+    print(f"Using device: {device}, device_id: {device_id}")
 
     if (args.task == 'abs'):
         if (args.mode == 'train'):
