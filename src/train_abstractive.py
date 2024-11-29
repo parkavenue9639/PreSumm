@@ -166,13 +166,30 @@ def validate_abs(args, device_id):
 
 
 def validate(args, device_id, pt, step):
-    device = "cpu" if args.visible_gpus == '-1' else "cuda"
+    # 根据可见的 GPU 配置 gpu_ranks
+    if torch.backends.mps.is_available() and os.name == 'posix' and 'darwin' in os.sys.platform:
+        # macOS 上支持 MPS
+        args.gpu_ranks = [0]  # MPS 默认设备
+        args.world_size = 1  # MPS 设备数量固定为 1
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""  # macOS 上不需要 CUDA 环境变量
+        device = "mps"
+        device_id = 0  # 在 MPS 上，设备 ID 固定为 0
+    else:
+        # 其他平台逻辑，例如 CUDA 或 CPU
+        args.gpu_ranks = [int(i) for i in range(len(args.visible_gpus.split(',')))]
+        args.world_size = len(args.gpu_ranks)
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.visible_gpus
+        device = "cpu" if args.visible_gpus == '-1' else "cuda"
+        device_id = 0 if device == "cuda" else -1
+
     if (pt != ''):
         test_from = pt
     else:
         test_from = args.test_from
     logger.info('Loading checkpoint from %s' % test_from)
-    checkpoint = torch.load(test_from, map_location=lambda storage, loc: storage)
+    # 在较新的 PyTorch 版本中，为了防止潜在的代码注入攻击，torch.load 在加载 .pt 文件时默认使用了一个安全模式。
+    # 如果文件中包含了某些不在安全白名单中的全局对象（如 argparse.Namespace），就会导致 pickle.UnpicklingError 错误。
+    checkpoint = torch.load(test_from, map_location=lambda storage, loc: storage, weights_only=False)
     opt = vars(checkpoint['opt'])
     for k in opt.keys():
         if (k in model_flags):
@@ -198,14 +215,29 @@ def validate(args, device_id, pt, step):
 
 
 def test_abs(args, device_id, pt, step):
-    device = "cpu" if args.visible_gpus == '-1' else "cuda"
+    if torch.backends.mps.is_available() and os.name == 'posix' and 'darwin' in os.sys.platform:
+        # macOS 上支持 MPS
+        args.gpu_ranks = [0]  # MPS 默认设备
+        args.world_size = 1  # MPS 设备数量固定为 1
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""  # macOS 上不需要 CUDA 环境变量
+        device = "mps"
+        device_id = 0  # 在 MPS 上，设备 ID 固定为 0
+    else:
+        # 其他平台逻辑，例如 CUDA 或 CPU
+        args.gpu_ranks = [int(i) for i in range(len(args.visible_gpus.split(',')))]
+        args.world_size = len(args.gpu_ranks)
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.visible_gpus
+        device = "cpu" if args.visible_gpus == '-1' else "cuda"
+        device_id = 0 if device == "cuda" else -1
+
     if (pt != ''):
         test_from = pt
     else:
         test_from = args.test_from
     logger.info('Loading checkpoint from %s' % test_from)
 
-    checkpoint = torch.load(test_from, map_location=lambda storage, loc: storage)
+    checkpoint = torch.load(test_from, map_location=lambda storage, loc: storage, weights_only=False)
+
     opt = vars(checkpoint['opt'])
     for k in opt.keys():
         if (k in model_flags):

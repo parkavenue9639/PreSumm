@@ -241,7 +241,7 @@ def train_single_ext(args, device_id):
         # CPU 的配置
         logger.info("Running on CPU.")
 
-    # 加载检查点
+    # 加载检查点，用于断点续训，恢复模型权值和优化器状态
     if args.train_from != '':
         logger.info('Loading checkpoint from %s' % args.train_from)
         checkpoint = torch.load(args.train_from, map_location=lambda storage, loc: storage)

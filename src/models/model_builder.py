@@ -134,11 +134,14 @@ class Bert(nn.Module):
 
 class ExtSummarizer(nn.Module):
     def __init__(self, args, device, checkpoint):
+        # 初始化父类
         super(ExtSummarizer, self).__init__()
         self.args = args
         self.device = device
+        # 加载预训练BERT模型
         self.bert = Bert(args.large, args.temp_dir, args.finetune_bert)
 
+        # 初始化编码层，实现句子相关的进一步编码
         self.ext_layer = ExtTransformerEncoder(self.bert.model.config.hidden_size, args.ext_ff_size, args.ext_heads,
                                                args.ext_dropout, args.ext_layers)
         if (args.encoder == 'baseline'):
@@ -168,9 +171,12 @@ class ExtSummarizer(nn.Module):
         self.to(device)
 
     def forward(self, src, segs, clss, mask_src, mask_cls):
+        # 获取上下文表示
         top_vec = self.bert(src, segs, mask_src)
+        # 提取句子向量
         sents_vec = top_vec[torch.arange(top_vec.size(0)).unsqueeze(1), clss]
         sents_vec = sents_vec * mask_cls[:, :, None].float()
+        # 句子评分
         sent_scores = self.ext_layer(sents_vec, mask_cls).squeeze(-1)
         return sent_scores, mask_cls
 
@@ -214,7 +220,7 @@ class AbsSummarizer(nn.Module):
 
 
         if checkpoint is not None:
-            self.load_state_dict(checkpoint['model'], strict=True)
+            self.load_state_dict(checkpoint['model'], strict=False)
         else:
             for module in self.decoder.modules():
                 if isinstance(module, (nn.Linear, nn.Embedding)):
