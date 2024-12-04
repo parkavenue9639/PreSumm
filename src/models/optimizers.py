@@ -144,30 +144,63 @@ class Optimizer(object):
         self.weight_decay = weight_decay
 
     def set_parameters(self, params):
-        """ ? """
+        """
+        设置优化器的参数，并根据选择的优化方法初始化优化器。
+        确保优化器状态与模型参数所在的设备一致。
+
+        Args:
+            params (list): 模型参数列表，包含 (name, param) 的元组。
+        """
         self.params = []
         self.sparse_params = []
+
+        # 确保所有参数的设备一致
+        device = None
         for k, p in params:
             if p.requires_grad:
+                if device is None:
+                    device = p.device  # 获取第一个需要梯度的参数的设备
+                elif p.device != device:
+                    raise RuntimeError("All parameters must be on the same device.")
+
+                # 区分普通参数和稀疏参数
                 if self.method != 'sparseadam' or "embed" not in k:
                     self.params.append(p)
                 else:
                     self.sparse_params.append(p)
+
+        # 根据优化器方法初始化
         if self.method == 'sgd':
             self.optimizer = optim.SGD(self.params, lr=self.learning_rate)
         elif self.method == 'adagrad':
             self.optimizer = optim.Adagrad(self.params, lr=self.learning_rate)
             for group in self.optimizer.param_groups:
                 for p in group['params']:
-                    self.optimizer.state[p]['sum'] = self.optimizer\
-                        .state[p]['sum'].fill_(self.adagrad_accum)
+                    # 初始化 Adagrad 累积状态
+                    self.optimizer.state[p]['sum'] = self.optimizer.state[p]['sum'].fill_(self.adagrad_accum)
         elif self.method == 'adadelta':
             self.optimizer = optim.Adadelta(self.params, lr=self.learning_rate)
         elif self.method == 'adam':
-            self.optimizer = optim.Adam(self.params, lr=self.learning_rate,
-                                        betas=self.betas, eps=1e-9)
+            self.optimizer = optim.Adam(self.params, lr=self.learning_rate, betas=self.betas, eps=1e-9)
+        elif self.method == 'sparseadam' and self.sparse_params:
+            self.optimizer = optim.SparseAdam(self.sparse_params, lr=self.learning_rate, betas=self.betas, eps=1e-9)
         else:
-            raise RuntimeError("Invalid optim method: " + self.method)
+            raise RuntimeError("Invalid or unsupported optimization method: " + self.method)
+
+        # 确保优化器状态迁移到设备
+        self._move_optimizer_state_to_device(device)
+
+    def _move_optimizer_state_to_device(self, device):
+        """
+        将优化器的状态迁移到指定设备。
+
+        Args:
+            device (torch.device): 目标设备。
+        """
+        for state in self.optimizer.state.values():
+            for k, v in state.items():
+                if torch.is_tensor(v):
+                    state[k] = v.to(device)
 
     def _set_rate(self, learning_rate):
         self.learning_rate = learning_rate

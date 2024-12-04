@@ -120,11 +120,10 @@ class Trainer(object):
         """
         logger.info('Start training...')
 
-        # step =  self.optim._step + 1
         step = self.optim._step + 1
-        true_batchs = []
-        accum = 0
-        normalization = 0
+        true_batchs = []  # 临时存储批次数据
+        accum = 0  # 累积的批次数
+        normalization = 0  # 批次归一化因子，用于归一化损失
         train_iter = train_iter_fct()
 
         total_stats = Statistics()
@@ -159,6 +158,7 @@ class Trainer(object):
                         true_batchs = []
                         accum = 0
                         normalization = 0
+
                         if (step % self.save_checkpoint_steps == 0 and self.gpu_rank == 0):
                             self._save(step)
 

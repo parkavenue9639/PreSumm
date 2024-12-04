@@ -30,13 +30,14 @@ class Batch(object):
             tgt = torch.tensor(self._pad(pre_tgt, 0))
 
             segs = torch.tensor(self._pad(pre_segs, 0))
-            mask_src = 1 - (src == 0)
-            mask_tgt = 1 - (tgt == 0)
-
+            # PyTorch 从某个版本开始不支持直接对布尔类型张量使用减法操作
+            mask_src = ~(src == 0)
+            mask_tgt = ~(tgt == 0)
 
             clss = torch.tensor(self._pad(pre_clss, -1))
             src_sent_labels = torch.tensor(self._pad(pre_src_sent_labels, 0))
-            mask_cls = 1 - (clss == -1)
+            mask_cls = ~(clss == -1)
+
             clss[clss == -1] = 0
             setattr(self, 'clss', clss.to(device))
             setattr(self, 'mask_cls', mask_cls.to(device))
@@ -81,7 +82,8 @@ def load_dataset(args, corpus_type, shuffle):
         return dataset
 
     # Sort the glob output by file name (by increasing indexes).
-    pts = sorted(glob.glob(args.bert_data_path + '.' + corpus_type + '.[0-9]*.pt'))
+    # 根据当前命名格式进行修改
+    pts = sorted(glob.glob(args.bert_data_path + '/bert_data.' + corpus_type + '.[0-9]*.bert.pt'))
     if pts:
         if (shuffle):
             random.shuffle(pts)
@@ -90,6 +92,7 @@ def load_dataset(args, corpus_type, shuffle):
             yield _lazy_dataset_loader(pt, corpus_type)
     else:
         # Only one inputters.*Dataset, simple!
+        # bert_data.train.pt
         pt = args.bert_data_path + '.' + corpus_type + '.pt'
         yield _lazy_dataset_loader(pt, corpus_type)
 

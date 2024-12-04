@@ -17,10 +17,11 @@ def build_optim(args, model, checkpoint):
         saved_optimizer_state_dict = optim.optimizer.state_dict()
         optim.optimizer.load_state_dict(saved_optimizer_state_dict)
         if args.visible_gpus != '-1':
+            device = next(model.parameters()).device
             for state in optim.optimizer.state.values():
                 for k, v in state.items():
                     if torch.is_tensor(v):
-                        state[k] = v.cuda()
+                        state[k] = v.to(device)  # 灵活设备处理
 
         if (optim.method == 'adam') and (len(optim.optimizer.state) < 1):
             raise RuntimeError(
@@ -28,6 +29,7 @@ def build_optim(args, model, checkpoint):
                 " but optimizer state is empty")
 
     else:
+        device = next(model.parameters()).device
         optim = Optimizer(
             args.optim, args.lr, args.max_grad_norm,
             beta1=args.beta1, beta2=args.beta2,
@@ -175,7 +177,8 @@ class ExtSummarizer(nn.Module):
         top_vec = self.bert(src, segs, mask_src)
         # 提取句子向量
         sents_vec = top_vec[torch.arange(top_vec.size(0)).unsqueeze(1), clss]
-        sents_vec = sents_vec * mask_cls[:, :, None].float()
+        # sents_vec = sents_vec * mask_cls[:, :, None].float() 改为原地操作，减少内存占用
+        sents_vec.mul_(mask_cls[:, :, None].float())
         # 句子评分
         sent_scores = self.ext_layer(sents_vec, mask_cls).squeeze(-1)
         return sent_scores, mask_cls
